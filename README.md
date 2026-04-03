@@ -45,12 +45,32 @@ cd drive-mirror
 cargo build --release
 ```
 
-The binary will be available at `target/release/drive-mirror` or at the project root as `drive-mirror`.
+The binary will be generated at `target/release/drive-mirror`.
+
+You can also create a symbolic link in the root folder for easier access:
+```bash
+ln -s target/release/drive-mirror drive-mirror
+```
+
+### macOS Quick Start (Terminal)
+
+If you downloaded the binary or built it yourself and see the "Apple could not verify..." warning, you can allow it using this command in your terminal:
+
+```bash
+xattr -d com.apple.quarantine drive-mirror
+```
+
+Once done, you can run the tool directly:
+```bash
+./drive-mirror --help
+```
 
 ## Usage
 
+To run the binary in your current directory, use the `./` prefix:
+
 ```bash
-drive-mirror --left <PATH_LEFT> --right <PATH_RIGHT> [OPTIONS]
+./drive-mirror --left <PATH_LEFT> --right <PATH_RIGHT> [OPTIONS]
 ```
 
 ### Options
@@ -69,12 +89,12 @@ drive-mirror --left <PATH_LEFT> --right <PATH_RIGHT> [OPTIONS]
 
 **Basic comparison by size:**
 ```bash
-drive-mirror --left /path/to/source --right /path/to/backup
+./drive-mirror --left /path/to/source --right /path/to/backup
 ```
 
 **Accurate comparison using BLAKE3 hashes, excluding temporary files:**
 ```bash
-drive-mirror --left ./src --right ./backup --compare hash --exclude "*.tmp,node_modules/*"
+./drive-mirror --left ./src --right ./backup --compare hash --exclude "*.tmp,node_modules/*"
 ```
 
 ## How it Works
