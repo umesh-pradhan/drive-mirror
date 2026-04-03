@@ -18,6 +18,12 @@ A high-performance terminal-based (TUI) utility written in Rust to compare and s
 
 ## Installation
 
+### Binary Downloads
+
+You can download pre-compiled binaries for Linux, macOS, and Windows from the [Releases](https://github.com/umesh-pradhan/drive-mirror/releases) page.
+
+### From Source
+
 Ensure you have [Rust and Cargo](https://rustup.rs/) installed.
 
 ```bash
