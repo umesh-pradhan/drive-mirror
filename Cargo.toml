@@ -2,6 +2,24 @@
 name = "drive-mirror"
 version = "0.1.0"
 edition = "2024"
+authors = ["Umesh Pradhan <umesh.pradhan@example.com>"]
+description = "A high-performance TUI utility to compare and synchronize files between two directories."
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/umesh-pradhan/drive-mirror"
+homepage = "https://github.com/umesh-pradhan/drive-mirror"
+keywords = ["tui", "sync", "backup", "compare", "file-manager"]
+categories = ["command-line-utilities"]
+exclude = [
+    "activity.db",
+    "acttivity",
+    "drive-mirror",
+    "hd.db",
+    "hd1.db",
+    "target/**",
+    ".idea/**",
+    ".DS_Store",
+]
 
 [dependencies]
 anyhow = "1"

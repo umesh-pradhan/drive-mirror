@@ -1,2 +1,80 @@
 # drive-mirror
-Compare and Copy between drive
+
+A high-performance terminal-based (TUI) utility written in Rust to compare and synchronize files between two directories (e.g., local drive and backup/external drive).
+
+## Features
+
+- **TUI Interface**: Interactive terminal interface built with `ratatui` for easy scanning, review, and synchronization.
+- **Multiple Comparison Modes**: Compare files based on **Size** (fast) or **BLAKE3 Hash** (accurate).
+- **Flexible Sync Strategies**:
+  - `NewerMtime`: Prefer the file with the newer modification time.
+  - `PreferLeft`: Overwrite right with left.
+  - `PreferRight`: Overwrite left with right.
+  - `Skip`: Do nothing for mismatches.
+- **Exclusion Support**: Use glob patterns to exclude specific files or directories.
+- **SQLite Activity Logging**: Tracks synchronization history in an `activity.db` file.
+- **Dry Run**: Preview changes before applying them.
+- **Retry Logic**: Configurable retries for failed file operations.
+
+## Installation
+
+Ensure you have [Rust and Cargo](https://rustup.rs/) installed.
+
+```bash
+git clone https://github.com/umesh-pradhan/drive-mirror.git
+cd drive-mirror
+cargo build --release
+```
+
+The binary will be available at `target/release/drive-mirror` or at the project root as `drive-mirror`.
+
+## Usage
+
+```bash
+drive-mirror --left <PATH_LEFT> --right <PATH_RIGHT> [OPTIONS]
+```
+
+### Options
+
+- `--left <PATH>`: Path to the "left" directory.
+- `--right <PATH>`: Path to the "right" directory.
+- `--db <PATH>`: Path to the SQLite database for activity logging (default: `activity.db`).
+- `--compare <MODE>`: Comparison mode: `size` or `hash` (default: `size`).
+- `--exclude <PATTERNS>`: Comma-separated list of glob patterns to exclude.
+- `--retries <N>`: Number of retries for file operations (default: 2).
+- `--dry-run`: Enable dry run mode (no actual file changes).
+- `-h, --help`: Print help information.
+- `-V, --version`: Print version information.
+
+### Examples
+
+**Basic comparison by size:**
+```bash
+drive-mirror --left /path/to/source --right /path/to/backup
+```
+
+**Accurate comparison using BLAKE3 hashes, excluding temporary files:**
+```bash
+drive-mirror --left ./src --right ./backup --compare hash --exclude "*.tmp,node_modules/*"
+```
+
+## How it Works
+
+1. **Scanning**: The tool walks through both directories, collecting file metadata (size, mtime, and optionally hashes).
+2. **Review**: Displays a diff of the two directories (Missing Left, Missing Right, Mismatch).
+3. **Strategy Selection**: Choose how to handle mismatches (e.g., sync newer, prefer left).
+4. **Syncing**: Applies the selected strategy, copying or deleting files as necessary.
+5. **History**: View previous synchronization actions stored in the database.
+
+## Tech Stack
+
+- **Rust**: Language.
+- **ratatui & crossterm**: For the terminal UI.
+- **rusqlite**: For activity logging.
+- **blake3**: For fast and secure hashing.
+- **walkdir**: For efficient directory traversal.
+- **clap**: For command-line argument parsing.
+
+## License
+
+[MIT](LICENSE)
