@@ -22,6 +22,19 @@ A high-performance terminal-based (TUI) utility written in Rust to compare and s
 
 You can download pre-compiled binaries for Linux, macOS, and Windows from the [Releases](https://github.com/umesh-pradhan/drive-mirror/releases) page.
 
+#### macOS Security Note
+Because `drive-mirror` is an open-source project and not yet signed with a paid Apple Developer certificate, macOS Gatekeeper may block it from running with a warning that "Apple could not verify it for malware."
+
+To run it:
+1.  Locate `drive-mirror` in **Finder**.
+2.  **Right-click** (or Control-click) the application.
+3.  Choose **Open** from the menu.
+4.  Click **Open** again in the dialog box to confirm.
+
+Once opened this way, it will run normally in the future.
+
+**For Developers:** If you want to notarize your own builds, see the [macOS Notarization Guide](MACOS_NOTARIZATION.md).
+
 ### From Source
 
 Ensure you have [Rust and Cargo](https://rustup.rs/) installed.
