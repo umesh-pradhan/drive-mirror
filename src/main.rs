@@ -116,7 +116,7 @@ struct LastEntry {
     hash_right: Option<String>,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ActionType {
     CopyLeftToRight,
     CopyRightToLeft,
@@ -955,7 +955,13 @@ fn apply_override(state: &mut AppState, action: ActionType) {
         return;
     }
     let targets: Vec<usize> = if state.selected_items.is_empty() {
-        vec![state.selected.selected().unwrap_or(0)]
+        let local = state.selected.selected().unwrap_or(0);
+        state
+            .filtered_indices
+            .get(local)
+            .copied()
+            .into_iter()
+            .collect()
     } else {
         state.selected_items.iter().copied().collect()
     };
@@ -979,7 +985,13 @@ fn apply_delete_override(state: &mut AppState) {
         return;
     }
     let targets: Vec<usize> = if state.selected_items.is_empty() {
-        vec![state.selected.selected().unwrap_or(0)]
+        let local = state.selected.selected().unwrap_or(0);
+        state
+            .filtered_indices
+            .get(local)
+            .copied()
+            .into_iter()
+            .collect()
     } else {
         state.selected_items.iter().copied().collect()
     };
@@ -1044,7 +1056,13 @@ fn details_text(state: &AppState, args: &Args) -> String {
     }
     let mut lines = Vec::new();
     let selection: Vec<usize> = if state.selected_items.is_empty() {
-        vec![state.selected.selected().unwrap_or(0)]
+        let local = state.selected.selected().unwrap_or(0);
+        state
+            .filtered_indices
+            .get(local)
+            .copied()
+            .into_iter()
+            .collect()
     } else {
         state.selected_items.iter().copied().collect()
     };
@@ -1498,11 +1516,14 @@ fn handle_review_input(state: &mut AppState, code: KeyCode, modifiers: KeyModifi
             if state.diffs.is_empty() {
                 return;
             }
-            let idx = state.selected.selected().unwrap_or(0);
-            if state.selected_items.contains(&idx) {
-                state.selected_items.remove(&idx);
-            } else {
-                state.selected_items.insert(idx);
+            if let Some(local) = state.selected.selected() {
+                if let Some(&idx) = state.filtered_indices.get(local) {
+                    if state.selected_items.contains(&idx) {
+                        state.selected_items.remove(&idx);
+                    } else {
+                        state.selected_items.insert(idx);
+                    }
+                }
             }
         }
         KeyCode::Char('a') => {
@@ -1537,7 +1558,7 @@ fn handle_review_input(state: &mut AppState, code: KeyCode, modifiers: KeyModifi
             }
             state.status_line = "Toggled force recopy.".to_string();
         }
-        KeyCode::Char('d') => {
+        KeyCode::Char('d') | KeyCode::Delete => {
             apply_delete_override(state);
         }
         KeyCode::Char('n') => {
@@ -1606,8 +1627,13 @@ fn handle_confirm_input(
                 SyncScope::Selected => {
                     if state.selected_items.is_empty() {
                         let idx_local = state.selected.selected().unwrap_or(0);
-                        let idx = *state.filtered_indices.get(idx_local).unwrap_or(&0);
-                        state.diffs.get(idx).cloned().into_iter().collect()
+                        if let Some(&idx) = state.filtered_indices.get(idx_local) {
+                            state.diffs.get(idx).cloned().into_iter().collect()
+                        } else {
+                            // Fallback to absolute index if filter/indices are weird, 
+                            // though in Review phase filtered_indices should be valid.
+                            state.diffs.get(idx_local).cloned().into_iter().collect()
+                        }
                     } else {
                         state
                             .selected_items
@@ -2625,6 +2651,8 @@ fn insert_action_result(conn: &Connection, run_id: i64, result: &ActionResult) -
 mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    mod repro_tests;
 
     #[test]
     fn diff_detects_missing_and_mismatch() {
