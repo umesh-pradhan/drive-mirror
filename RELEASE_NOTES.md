@@ -1,15 +1,14 @@
-# Release Notes - v0.1.2 (Current)
+# Release Notes - v0.1.3 (Current)
 
-Maintenance release addressing GitHub Actions deprecation warnings and performance optimizations.
+Maintenance release to eliminate Node.js runtime compatibility warnings in GitHub Actions.
 
 ### 🛠️ Maintenance
 
-- Updated GitHub Actions to latest versions (v6-v8) and enabled Node.js 24 for workflows.
-- Optimized release build with `Cargo.lock` synchronization.
+- Switched from `softprops/action-gh-release` to native GitHub CLI (`gh`) for creating releases. This removes the dependency on the Node.js 20 runtime and avoids deprecation warnings when forcing Node.js 24.
 
 ---
 
-# Release Notes - v0.1.1 (Stable)
+# Release Notes - v0.1.2 (Stable)
 
 This release focus on improving documentation and project maintenance.
 

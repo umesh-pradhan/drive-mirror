@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-04-04
+
+### Fixed
+- Replaced third-party `softprops/action-gh-release` with native GitHub CLI (`gh`) for creating releases. This avoids Node.js 20/24 runtime compatibility warnings and improves reliability.
+
 ## [0.1.2] - 2026-04-04
 
 ### Fixed

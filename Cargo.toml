@@ -1,6 +1,6 @@
 [package]
 name = "drive-mirror"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
 authors = ["Umesh Pradhan <umesh.pradhan@example.com>"]
 description = "A fast, interactive terminal (TUI) utility for efficient directory comparison and synchronization with history tracking."
