@@ -1,4 +1,15 @@
-# Release Notes - v0.1.1 (Upcoming)
+# Release Notes - v0.1.2 (Current)
+
+Maintenance release addressing GitHub Actions deprecation warnings and performance optimizations.
+
+### 🛠️ Maintenance
+
+- Updated GitHub Actions to latest versions (v6-v8) and enabled Node.js 24 for workflows.
+- Optimized release build with `Cargo.lock` synchronization.
+
+---
+
+# Release Notes - v0.1.1 (Stable)
 
 This release focus on improving documentation and project maintenance.
 
