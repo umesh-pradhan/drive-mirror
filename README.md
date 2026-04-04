@@ -1,20 +1,25 @@
 # drive-mirror
 
-A high-performance terminal-based (TUI) utility written in Rust to compare and synchronize files between two directories (e.g., local drive and backup/external drive).
+[![Crates.io](https://img.shields.io/crates/v/drive-mirror.svg)](https://crates.io/crates/drive-mirror)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+**drive-mirror** is a high-performance terminal-based (TUI) utility written in Rust, designed for efficient **drive mirroring**, comparison, and synchronization between two directories (e.g., local drive and backup/external drive).
+
+If you are looking for a fast, reliable, and interactive way to **mirror your drive**, `drive-mirror` provides a robust TUI for scanning and reviewing changes before applying them.
 
 ## Features
 
-- **TUI Interface**: Interactive terminal interface built with `ratatui` for easy scanning, review, and synchronization.
-- **Multiple Comparison Modes**: Compare files based on **Size** (fast) or **BLAKE3 Hash** (accurate).
-- **Flexible Sync Strategies**:
-  - `NewerMtime`: Prefer the file with the newer modification time.
-  - `PreferLeft`: Overwrite right with left.
+- **Interactive TUI**: A terminal interface built with `ratatui` for intuitive **drive mirroring** and sync operations.
+- **Fast Comparison**: Efficiently compare directories based on **Size** (fast) or **BLAKE3 Hash** (accurate).
+- **Drive Mirroring Strategies**:
+  - `NewerMtime`: Prefer files with more recent modification times.
+  - `PreferLeft`: Overwrite right with left (Standard Mirror).
   - `PreferRight`: Overwrite left with right.
   - `Skip`: Do nothing for mismatches.
-- **Exclusion Support**: Use glob patterns to exclude specific files or directories.
-- **SQLite Activity Logging**: Tracks synchronization history in an `activity.db` file.
-- **Dry Run**: Preview changes before applying them.
-- **Retry Logic**: Configurable retries for failed file operations.
+- **Exclusion Support**: Use glob patterns to exclude specific files or directories during the **mirror** process.
+- **SQLite History**: Tracks all **drive mirroring** and sync activity in an `activity.db` file.
+- **Dry Run**: Preview your **drive mirror** changes before committing to disk.
+- **Retry Logic**: Configurable retries for reliable file synchronization.
 
 ## Installation
 
