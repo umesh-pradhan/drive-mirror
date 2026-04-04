@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build - ${{ matrix.target }}
@@ -72,6 +75,7 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
+          pattern: drive-mirror-*
           merge-multiple: true
 
       - name: Generate Checksums
