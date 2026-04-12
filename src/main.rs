@@ -61,6 +61,7 @@ enum Phase {
     Review,
     ChoosingStrategy,
     ConfirmSync,
+    ConfirmDelete,
     History,
     Syncing,
     Done,
@@ -558,15 +559,33 @@ fn run_app(
             let _r_label = args.right.display().to_string();
             let (l_free, l_total) = space_info(&args.left);
             let (r_free, r_total) = space_info(&args.right);
-            // Add an extra blank line between the summary and the free-space line for readability
-            let hdr2 = format!(
-                "{}\n\nL: {} free/{}    R: {} free/{}",
-                hdr,
-                format_bytes(l_free),
-                format_bytes(l_total),
-                format_bytes(r_free),
-                format_bytes(r_total)
-            );
+            let filter_label = match state.filter {
+                Filter::All => None,
+                Filter::MissingLeft => Some("Filter: Missing Left"),
+                Filter::MissingRight => Some("Filter: Missing Right"),
+                Filter::Mismatch => Some("Filter: Mismatch"),
+                Filter::Conflict => Some("Filter: Conflict"),
+            };
+            let hdr2 = if let Some(f) = filter_label {
+                format!(
+                    "{}\n\nL: {} free/{}    R: {} free/{}\n\n[ {} ]",
+                    hdr,
+                    format_bytes(l_free),
+                    format_bytes(l_total),
+                    format_bytes(r_free),
+                    format_bytes(r_total),
+                    f
+                )
+            } else {
+                format!(
+                    "{}\n\nL: {} free/{}    R: {} free/{}",
+                    hdr,
+                    format_bytes(l_free),
+                    format_bytes(l_total),
+                    format_bytes(r_free),
+                    format_bytes(r_total)
+                )
+            };
             let header = Paragraph::new(hdr2)
                 .block(Block::default().borders(Borders::ALL))
                 .wrap(Wrap { trim: true });
@@ -582,7 +601,7 @@ fn run_app(
                     .wrap(Wrap { trim: true });
                     frame.render_widget(body, chunks[1]);
                 }
-                Phase::Review | Phase::ChoosingStrategy | Phase::ConfirmSync => {
+                Phase::Review | Phase::ChoosingStrategy | Phase::ConfirmSync | Phase::ConfirmDelete => {
                     let body_chunks = Layout::default()
                         .direction(Direction::Vertical)
                         .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
@@ -749,16 +768,24 @@ fn run_app(
                 Phase::Done => {
                     let mut summary = String::new();
                     summary.push_str(&state.status_line);
-                    let mut copied: Vec<String> = state
+                    let mut completed: Vec<String> = state
                         .last_results
                         .iter()
                         .filter(|r| r.error.is_none() && (r.outcome == "ok" || r.outcome == "dry-run"))
-                        .map(|r| r.action.path_rel.display().to_string())
+                        .map(|r| {
+                            let label = match r.action.action_type {
+                                ActionType::CopyLeftToRight => "copy L→R",
+                                ActionType::CopyRightToLeft => "copy R→L",
+                                ActionType::DeleteLeft => "deleted L",
+                                ActionType::DeleteRight => "deleted R",
+                            };
+                            format!("[{}] {}", label, r.action.path_rel.display())
+                        })
                         .collect();
-                    copied.sort();
-                    if !copied.is_empty() {
-                        summary.push_str("\nCopied files:\n");
-                        for p in copied {
+                    completed.sort();
+                    if !completed.is_empty() {
+                        summary.push_str("\nCompleted actions:\n");
+                        for p in completed {
                             summary.push_str("- ");
                             summary.push_str(&p);
                             summary.push('\n');
@@ -806,6 +833,7 @@ fn run_app(
                     state.status_line = "Press Esc again to quit.".to_string();
                     match state.phase {
                         Phase::ConfirmSync
+                        | Phase::ConfirmDelete
                         | Phase::ChoosingStrategy
                         | Phase::Syncing
                         | Phase::Done
@@ -866,6 +894,9 @@ fn run_app(
                     Phase::ChoosingStrategy => handle_strategy_input(state, key.code),
                     Phase::ConfirmSync => {
                         handle_confirm_input(state, key.code, args, conn, run_id, &tx)?
+                    }
+                    Phase::ConfirmDelete => {
+                        handle_confirm_delete_input(state, key.code, args, conn, run_id, &tx)?;
                     }
                     Phase::Done => {
                         if key.code == KeyCode::Char('q') {
@@ -928,6 +959,13 @@ fn help_text(state: &AppState) -> Line<'static> {
         Phase::ConfirmSync => Line::from(vec![
             Span::raw("Apply sync? Enter/y yes, n no "),
             Span::raw("b: back "),
+            Span::raw("Esc: back "),
+            Span::raw("Esc Esc: quit"),
+        ]),
+        Phase::ConfirmDelete => Line::from(vec![
+            Span::raw("Confirm delete selected extras? "),
+            Span::raw("Enter/y: delete  "),
+            Span::raw("n/b: back "),
             Span::raw("Esc: back "),
             Span::raw("Esc Esc: quit"),
         ]),
@@ -1020,6 +1058,29 @@ fn apply_delete_override(state: &mut AppState) {
     } else {
         "Delete applies only to missing entries.".to_string()
     };
+}
+
+fn handle_confirm_delete_input(
+    state: &mut AppState,
+    code: KeyCode,
+    args: &Args,
+    conn: &Connection,
+    run_id: i64,
+    tx: &Sender<WorkerEvent>,
+) -> Result<()> {
+    match code {
+        KeyCode::Char('y') | KeyCode::Enter => {
+            apply_delete_override(state);
+            state.sync_scope = SyncScope::Selected;
+            handle_confirm_input(state, KeyCode::Enter, args, conn, run_id, tx)?;
+        }
+        KeyCode::Char('n') | KeyCode::Char('b') => {
+            state.phase = Phase::Review;
+            state.status_line = "Delete cancelled.".to_string();
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 fn handle_history_input(state: &mut AppState, code: KeyCode) {
@@ -1559,7 +1620,8 @@ fn handle_review_input(state: &mut AppState, code: KeyCode, modifiers: KeyModifi
             state.status_line = "Toggled force recopy.".to_string();
         }
         KeyCode::Char('d') | KeyCode::Delete => {
-            apply_delete_override(state);
+            state.phase = Phase::ConfirmDelete;
+            state.status_line = "Confirm delete? y/Enter=yes  n/b=back".to_string();
         }
         KeyCode::Char('n') => {
             state.sort_by_name = !state.sort_by_name;
@@ -1969,15 +2031,15 @@ fn plan_actions(
 ) -> Vec<Action> {
     let mut actions = Vec::new();
     for diff in diffs {
-        if copied_recently.contains(&diff.path_rel) && !force_recopy.contains(&diff.path_rel) {
-            continue;
-        }
         if let Some(override_action) = overrides.get(&diff.path_rel) {
             actions.push(Action {
                 path_rel: diff.path_rel.clone(),
                 action_type: *override_action,
                 reason: "override".to_string(),
             });
+            continue;
+        }
+        if copied_recently.contains(&diff.path_rel) && !force_recopy.contains(&diff.path_rel) {
             continue;
         }
         match diff.status {
