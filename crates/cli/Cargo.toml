@@ -1,0 +1,25 @@
+[package]
+name = "drive-mirror"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "A fast, interactive terminal (TUI) utility for efficient directory comparison, synchronization, and drive mirroring with history tracking."
+readme = "../../README.md"
+homepage = "https://github.com/umesh-pradhan/drive-mirror"
+keywords = ["drive-mirror", "mirror", "sync", "tui", "backup"]
+categories = ["command-line-utilities"]
+
+[dependencies]
+anyhow.workspace = true
+clap = { workspace = true }
+crossterm.workspace = true
+ratatui.workspace = true
+drive-mirror-core.workspace = true
+drive-mirror-tui.workspace = true
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+incremental = false

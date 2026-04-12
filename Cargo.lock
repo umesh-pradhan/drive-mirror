@@ -303,17 +303,38 @@ name = "drive-mirror"
 version = "0.1.3"
 dependencies = [
  "anyhow",
+ "clap",
+ "crossterm",
+ "drive-mirror-core",
+ "drive-mirror-tui",
+ "ratatui",
+]
+
+[[package]]
+name = "drive-mirror-core"
+version = "0.1.3"
+dependencies = [
+ "anyhow",
  "blake3",
  "chrono",
  "clap",
- "crossterm",
  "filetime",
  "fs2",
  "globset",
- "ratatui",
  "rusqlite",
  "tempfile",
  "walkdir",
+]
+
+[[package]]
+name = "drive-mirror-tui"
+version = "0.1.3"
+dependencies = [
+ "anyhow",
+ "crossterm",
+ "drive-mirror-core",
+ "ratatui",
+ "rusqlite",
 ]
 
 [[package]]
