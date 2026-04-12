@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-04-12
+
+### Added
+- Command palette (`/` key) with fuzzy search for all actions (sync, delete, filter, history, etc.)
+- Delete confirmation phase — `d` now prompts before executing any deletion
+- Active filter badge in header showing current filter at all times
+- Completed actions summary on Done screen with action type labels (`[copy L→R]`, `[deleted R]`, etc.)
+
+### Fixed
+- Delete override now correctly executes even for files in `copied_recently`
+- Override priority: explicit overrides always win over `copied_recently` skip logic
+
+### Changed
+- Restructured into Cargo workspace with three crates: `core` (pure logic), `tui` (ratatui UI), `cli` (binary)
+- Core logic has zero TUI dependency — fully unit testable in isolation
+
 ## [0.1.3] - 2026-04-04
 
 ### Fixed

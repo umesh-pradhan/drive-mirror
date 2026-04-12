@@ -1,51 +1,21 @@
-# Release Notes - v0.1.3 (Current)
+## What's New in v0.1.4
 
-Maintenance release to eliminate Node.js runtime compatibility warnings in GitHub Actions.
+### Command Palette
+Press `/` in the Review screen to open a fuzzy command palette. Type to filter and `Enter` to execute:
+- `sync`, `sync-all`, `delete`, `missing-left`, `missing-right`, `mismatch`, `conflict`, `all`, `history`, `refresh`, `quit`
 
-### 🛠️ Maintenance
+### Delete Confirmation
+Pressing `d` now shows a confirmation step before deleting anything. `y`/`Enter` to confirm, `n`/`b`/`Esc` to cancel.
 
-- Switched from `softprops/action-gh-release` to native GitHub CLI (`gh`) for creating releases. This removes the dependency on the Node.js 20 runtime and avoids deprecation warnings when forcing Node.js 24.
+### Active Filter Badge
+The header now always shows the active filter, e.g. `[ Filter: Missing Left ]`.
 
----
+### Improved Done Summary
+The summary screen now shows action type per file: `[copy L→R]`, `[copy R→L]`, `[deleted L]`, `[deleted R]`.
 
-# Release Notes - v0.1.2 (Stable)
+### Bug Fixes
+- Delete override now correctly executes for files previously in `copied_recently`
+- Override priority fixed: explicit overrides always win over skip logic
 
-This release focus on improving documentation and project maintenance.
-
-### 🚀 Improvements
-
-- **macOS Experience:** Added detailed security notes and a quick-start guide for macOS users to handle Gatekeeper warnings.
-- **Repository Maintenance:** Cleaned up the repository by removing unused files and ensuring IDE-specific files (like `.idea`) are properly ignored.
-
-### 🛠️ Maintenance
-
-- Updated `.gitignore` to prevent tracking of build artifacts and IDE configurations.
-- Refined project structure by removing redundant files and directories.
-
----
-
-# Release Notes - v0.1.0 (Initial Release)
-
-High-performance TUI utility for directory synchronization.
-
-### ✨ Features
-
-- **TUI Interface:** Interactive terminal interface built with `ratatui` for easy scanning, review, and synchronization.
-- **Comparison Modes:** Support for fast comparison by **Size** or accurate comparison by **BLAKE3 Hash**.
-- **Sync Strategies:** Choose between `NewerMtime`, `PreferLeft`, `PreferRight`, and `Skip`.
-- **Exclusion Support:** Define glob patterns to exclude specific files or directories.
-- **Activity Logging:** Tracks synchronization history in a local SQLite database (`activity.db`).
-- **Dry Run:** Safely preview changes before applying them to your files.
-- **Retry Logic:** Automatic retries for failed file operations.
-
-### 📦 Supported Platforms
-
-- **Linux** (x86_64)
-- **macOS** (Apple Silicon and Intel)
-- **Windows** (x86_64)
-
-### 🔗 Useful Links
-
-- [GitHub Repository](https://github.com/umesh-pradhan/drive-mirror)
-- [Installation Guide](https://github.com/umesh-pradhan/drive-mirror#installation)
-- [Usage Examples](https://github.com/umesh-pradhan/drive-mirror#usage)
+### Internal
+- Restructured into a Cargo workspace (`core` / `tui` / `cli`) for better testability and extensibility

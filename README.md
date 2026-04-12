@@ -5,40 +5,38 @@
 
 **drive-mirror** is a high-performance terminal-based (TUI) utility written in Rust, designed for efficient **drive mirroring**, comparison, and synchronization between two directories (e.g., local drive and backup/external drive).
 
-If you are looking for a fast, reliable, and interactive way to **mirror your drive**, `drive-mirror` provides a robust TUI for scanning and reviewing changes before applying them.
-
 ## Features
 
 - **Interactive TUI**: A terminal interface built with `ratatui` for intuitive **drive mirroring** and sync operations.
+- **Command Palette**: Press `/` to open a fuzzy command palette — type `sync`, `delete`, `missing-left`, `history`, etc. to execute actions instantly.
 - **Fast Comparison**: Efficiently compare directories based on **Size** (fast) or **BLAKE3 Hash** (accurate).
 - **Drive Mirroring Strategies**:
   - `NewerMtime`: Prefer files with more recent modification times.
   - `PreferLeft`: Overwrite right with left (Standard Mirror).
   - `PreferRight`: Overwrite left with right.
   - `Skip`: Do nothing for mismatches.
-- **Exclusion Support**: Use glob patterns to exclude specific files or directories during the **mirror** process.
-- **SQLite History**: Tracks all **drive mirroring** and sync activity in an `activity.db` file.
-- **Dry Run**: Preview your **drive mirror** changes before committing to disk.
+- **Delete Confirmation**: Select files with `Space`, press `d`, confirm before anything is deleted.
+- **Active Filter Badge**: Header shows the active filter (e.g., `[ Filter: Missing Left ]`) at all times.
+- **Completed Actions Summary**: Done screen shows `[copy L→R]`, `[deleted R]` etc. per file.
+- **Exclusion Support**: Use glob patterns to exclude specific files or directories.
+- **SQLite History**: Tracks all sync activity in an `activity.db` file.
+- **Dry Run**: Preview changes before committing to disk.
 - **Retry Logic**: Configurable retries for reliable file synchronization.
 
 ## Installation
 
 ### Binary Downloads
 
-You can download pre-compiled binaries for Linux, macOS, and Windows from the [Releases](https://github.com/umesh-pradhan/drive-mirror/releases) page.
+Download pre-compiled binaries for Linux, macOS, and Windows from the [Releases](https://github.com/umesh-pradhan/drive-mirror/releases) page.
 
 #### macOS Security Note
-Because `drive-mirror` is an open-source project and not yet signed with a paid Apple Developer certificate, macOS Gatekeeper may block it from running with a warning that "Apple could not verify it for malware."
+Because `drive-mirror` is not yet signed with a paid Apple Developer certificate, macOS Gatekeeper may block it. To allow it:
 
-To run it:
-1.  Locate `drive-mirror` in **Finder**.
-2.  **Right-click** (or Control-click) the application.
-3.  Choose **Open** from the menu.
-4.  Click **Open** again in the dialog box to confirm.
+```bash
+xattr -d com.apple.quarantine drive-mirror
+```
 
-Once opened this way, it will run normally in the future.
-
-**For Developers:** If you want to notarize your own builds, see the [macOS Notarization Guide](MACOS_NOTARIZATION.md).
+Or right-click → Open → Open in Finder.
 
 ### From Source
 
@@ -47,32 +45,12 @@ Ensure you have [Rust and Cargo](https://rustup.rs/) installed.
 ```bash
 git clone https://github.com/umesh-pradhan/drive-mirror.git
 cd drive-mirror
-cargo build --release
+cargo build --release -p drive-mirror
 ```
 
-The binary will be generated at `target/release/drive-mirror`.
-
-You can also create a symbolic link in the root folder for easier access:
-```bash
-ln -s target/release/drive-mirror drive-mirror
-```
-
-### macOS Quick Start (Terminal)
-
-If you downloaded the binary or built it yourself and see the "Apple could not verify..." warning, you can allow it using this command in your terminal:
-
-```bash
-xattr -d com.apple.quarantine drive-mirror
-```
-
-Once done, you can run the tool directly:
-```bash
-./drive-mirror --help
-```
+The binary will be at `target/release/drive-mirror`.
 
 ## Usage
-
-To run the binary in your current directory, use the `./` prefix:
 
 ```bash
 ./drive-mirror --left <PATH_LEFT> --right <PATH_RIGHT> [OPTIONS]
@@ -80,44 +58,77 @@ To run the binary in your current directory, use the `./` prefix:
 
 ### Options
 
-- `--left <PATH>`: Path to the "left" directory.
-- `--right <PATH>`: Path to the "right" directory.
-- `--db <PATH>`: Path to the SQLite database for activity logging (default: `activity.db`).
-- `--compare <MODE>`: Comparison mode: `size` or `hash` (default: `size`).
-- `--exclude <PATTERNS>`: Comma-separated list of glob patterns to exclude.
-- `--retries <N>`: Number of retries for file operations (default: 2).
-- `--dry-run`: Enable dry run mode (no actual file changes).
-- `-h, --help`: Print help information.
-- `-V, --version`: Print version information.
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--left <PATH>` | Left directory | required |
+| `--right <PATH>` | Right directory | required |
+| `--db <PATH>` | SQLite database path | `activity.db` |
+| `--compare <MODE>` | `size` or `hash` | `size` |
+| `--exclude <PATTERNS>` | Comma-separated glob patterns | none |
+| `--retries <N>` | Retries for file operations | `2` |
+| `--dry-run` | Preview only, no changes | off |
 
 ### Examples
 
-**Basic comparison by size:**
 ```bash
+# Basic comparison by size
 ./drive-mirror --left /path/to/source --right /path/to/backup
-```
 
-**Accurate comparison using BLAKE3 hashes, excluding temporary files:**
-```bash
+# Hash comparison, excluding temp files
 ./drive-mirror --left ./src --right ./backup --compare hash --exclude "*.tmp,node_modules/*"
 ```
 
+## Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `↑` / `↓` | Navigate list |
+| `Space` | Toggle select item |
+| `Enter` | Sync selected |
+| `s` | Sync all (filtered) |
+| `d` | Delete extras (with confirmation) |
+| `/` | Open command palette |
+| `l` / `r` | Override: copy L→R / R→L |
+| `f` | Toggle force re-copy |
+| `1`–`5` | Filter: all / missing-L / missing-R / mismatch / conflict |
+| `n` | Toggle sort by name |
+| `h` | History |
+| `F5` | Refresh / rescan |
+| `o` | Reveal last file in Finder/Explorer |
+| `Esc Esc` | Quit |
+
+### Command Palette (`/`)
+
+Press `/` in the Review screen to open the palette. Type to fuzzy-filter:
+
+```
+> sy_
+  sync       — Sync selected item
+▶ sync-all   — Sync all filtered items
+```
+
+Available commands: `sync`, `sync-all`, `delete`, `missing-left`, `missing-right`, `mismatch`, `conflict`, `all`, `history`, `refresh`, `quit`.
+
 ## How it Works
 
-1. **Scanning**: The tool walks through both directories, collecting file metadata (size, mtime, and optionally hashes).
-2. **Review**: Displays a diff of the two directories (Missing Left, Missing Right, Mismatch).
-3. **Strategy Selection**: Choose how to handle mismatches (e.g., sync newer, prefer left).
-4. **Syncing**: Applies the selected strategy, copying or deleting files as necessary.
-5. **History**: View previous synchronization actions stored in the database.
+1. **Scanning**: Walks both directories collecting file metadata (size, mtime, optionally BLAKE3 hash).
+2. **Review**: Displays diffs — Missing Left, Missing Right, Mismatch, Conflict.
+3. **Strategy**: Choose how to handle mismatches (newer, prefer-left, prefer-right, skip).
+4. **Syncing**: Copies or deletes files with progress, verification, and retry.
+5. **History**: View previous runs stored in SQLite.
+
+## Project Structure
+
+```
+crates/
+  core/   — Pure logic: models, db, scanner, planner, sync (no TUI dependency)
+  tui/    — Ratatui UI: app loop, input handlers, renderer, command palette
+  cli/    — Binary entry point
+```
 
 ## Tech Stack
 
-- **Rust**: Language.
-- **ratatui & crossterm**: For the terminal UI.
-- **rusqlite**: For activity logging.
-- **blake3**: For fast and secure hashing.
-- **walkdir**: For efficient directory traversal.
-- **clap**: For command-line argument parsing.
+- **Rust** · **ratatui & crossterm** · **rusqlite** · **blake3** · **walkdir** · **clap**
 
 ## License
 
