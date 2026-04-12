@@ -1,11 +1,11 @@
 use crate::palette::handle_palette_input;
-use drive_mirror_core::db::{finalize_run, load_last_run_diffs};
+use drive_mirror_core::db::finalize_run;
 use drive_mirror_core::models::{
     recompute_filtered_indices, ActionType, AppState, DiffStatus, Filter, MismatchStrategy, Phase,
     SyncScope, WorkerEvent,
 };
 use drive_mirror_core::planner::plan_actions;
-use drive_mirror_core::scanner::{build_exclude_set, scan_worker};
+use drive_mirror_core::scanner::scan_worker;
 use drive_mirror_core::sync::sync_worker;
 use anyhow::Result;
 use crossterm::event::{KeyCode, KeyModifiers};
