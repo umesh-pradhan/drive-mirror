@@ -20,6 +20,7 @@ pub enum Phase {
     ChoosingStrategy,
     ConfirmSync,
     ConfirmDelete,
+    ConfirmExactDelete,
     History,
     Syncing,
     Done,
@@ -37,6 +38,8 @@ pub enum MismatchStrategy {
     PreferLeft,
     PreferRight,
     Skip,
+    ExactLeftToRight, // right mirrors left exactly: delete extras on right, copy missing, overwrite mismatches
+    ExactRightToLeft, // left mirrors right exactly: delete extras on left, copy missing, overwrite mismatches
 }
 
 #[derive(Clone, Debug)]
@@ -163,6 +166,7 @@ pub struct AppState {
     pub status_line: String,
     pub mismatch_strategy: Option<MismatchStrategy>,
     pub pending_actions: Vec<Action>,
+    pub pending_delete_actions: Vec<Action>,
     pub sync_scope: SyncScope,
     pub sort_by_name: bool,
     pub sync_completed: usize,
@@ -212,6 +216,7 @@ impl AppState {
             status_line: String::new(),
             mismatch_strategy: None,
             pending_actions: Vec::new(),
+            pending_delete_actions: Vec::new(),
             sync_scope: SyncScope::All,
             sort_by_name: true,
             sync_completed: 0,

@@ -16,15 +16,27 @@ pub fn plan_actions(
             continue;
         }
         if copied_recently.contains(&diff.path_rel) && !force_recopy.contains(&diff.path_rel) {
-            continue;
+            // For exact strategies, still emit delete actions even for recently-copied files
+            let is_exact_delete = matches!(
+                (strategy, &diff.status),
+                (MismatchStrategy::ExactLeftToRight, DiffStatus::MissingLeft) |
+                (MismatchStrategy::ExactRightToLeft, DiffStatus::MissingRight)
+            );
+            if !is_exact_delete { continue; }
         }
         match diff.status {
-            DiffStatus::MissingLeft => actions.push(Action { path_rel: diff.path_rel.clone(), action_type: ActionType::CopyRightToLeft, reason: "missing-left".to_string() }),
-            DiffStatus::MissingRight => actions.push(Action { path_rel: diff.path_rel.clone(), action_type: ActionType::CopyLeftToRight, reason: "missing-right".to_string() }),
+            DiffStatus::MissingLeft => match strategy {
+                MismatchStrategy::ExactLeftToRight => actions.push(Action { path_rel: diff.path_rel.clone(), action_type: ActionType::DeleteRight, reason: "exact-l2r-delete-right".to_string() }),
+                _ => actions.push(Action { path_rel: diff.path_rel.clone(), action_type: ActionType::CopyRightToLeft, reason: "missing-left".to_string() }),
+            },
+            DiffStatus::MissingRight => match strategy {
+                MismatchStrategy::ExactRightToLeft => actions.push(Action { path_rel: diff.path_rel.clone(), action_type: ActionType::DeleteLeft, reason: "exact-r2l-delete-left".to_string() }),
+                _ => actions.push(Action { path_rel: diff.path_rel.clone(), action_type: ActionType::CopyLeftToRight, reason: "missing-right".to_string() }),
+            },
             DiffStatus::Mismatch => match strategy {
                 MismatchStrategy::Skip => {}
-                MismatchStrategy::PreferLeft => actions.push(Action { path_rel: diff.path_rel.clone(), action_type: ActionType::CopyLeftToRight, reason: "mismatch-prefer-left".to_string() }),
-                MismatchStrategy::PreferRight => actions.push(Action { path_rel: diff.path_rel.clone(), action_type: ActionType::CopyRightToLeft, reason: "mismatch-prefer-right".to_string() }),
+                MismatchStrategy::PreferLeft | MismatchStrategy::ExactLeftToRight => actions.push(Action { path_rel: diff.path_rel.clone(), action_type: ActionType::CopyLeftToRight, reason: "mismatch-prefer-left".to_string() }),
+                MismatchStrategy::PreferRight | MismatchStrategy::ExactRightToLeft => actions.push(Action { path_rel: diff.path_rel.clone(), action_type: ActionType::CopyRightToLeft, reason: "mismatch-prefer-right".to_string() }),
                 MismatchStrategy::NewerMtime => {
                     let lm = diff.left.as_ref().map(|m| m.mtime).unwrap_or(0);
                     let rm = diff.right.as_ref().map(|m| m.mtime).unwrap_or(0);
@@ -74,6 +86,56 @@ mod tests {
         let mut copied_recently = BTreeSet::new();
         copied_recently.insert(path.clone());
         let actions = plan_actions(&diffs, MismatchStrategy::Skip, &overrides, &copied_recently, &BTreeSet::new());
+        assert_eq!(actions.len(), 1);
+        assert!(matches!(actions[0].action_type, ActionType::DeleteRight));
+    }
+
+    #[test]
+    fn exact_left_to_right_deletes_extras_on_right_and_copies_missing() {
+        // missing-right → copy L→R; missing-left → delete right; mismatch → copy L→R
+        let diffs = vec![
+            DiffEntry { path_rel: PathBuf::from("only_left.txt"), left: Some(FileMeta { size: 1, mtime: 1, hash: None, is_symlink: false, link_target: None }), right: None, status: DiffStatus::MissingRight },
+            DiffEntry { path_rel: PathBuf::from("only_right.txt"), left: None, right: Some(FileMeta { size: 1, mtime: 1, hash: None, is_symlink: false, link_target: None }), status: DiffStatus::MissingLeft },
+            DiffEntry { path_rel: PathBuf::from("mismatch.txt"), left: Some(FileMeta { size: 1, mtime: 2, hash: None, is_symlink: false, link_target: None }), right: Some(FileMeta { size: 2, mtime: 1, hash: None, is_symlink: false, link_target: None }), status: DiffStatus::Mismatch },
+        ];
+        let actions = plan_actions(&diffs, MismatchStrategy::ExactLeftToRight, &HashMap::new(), &BTreeSet::new(), &BTreeSet::new());
+        assert_eq!(actions.len(), 3);
+        let by_path: HashMap<_, _> = actions.iter().map(|a| (a.path_rel.as_path(), &a.action_type)).collect();
+        assert!(matches!(by_path[std::path::Path::new("only_left.txt")], ActionType::CopyLeftToRight));
+        assert!(matches!(by_path[std::path::Path::new("only_right.txt")], ActionType::DeleteRight));
+        assert!(matches!(by_path[std::path::Path::new("mismatch.txt")], ActionType::CopyLeftToRight));
+    }
+
+    #[test]
+    fn exact_right_to_left_deletes_extras_on_left_and_copies_missing() {
+        // missing-left → copy R→L; missing-right → delete left; mismatch → copy R→L
+        let diffs = vec![
+            DiffEntry { path_rel: PathBuf::from("only_right.txt"), left: None, right: Some(FileMeta { size: 1, mtime: 1, hash: None, is_symlink: false, link_target: None }), status: DiffStatus::MissingLeft },
+            DiffEntry { path_rel: PathBuf::from("only_left.txt"), left: Some(FileMeta { size: 1, mtime: 1, hash: None, is_symlink: false, link_target: None }), right: None, status: DiffStatus::MissingRight },
+            DiffEntry { path_rel: PathBuf::from("mismatch.txt"), left: Some(FileMeta { size: 1, mtime: 1, hash: None, is_symlink: false, link_target: None }), right: Some(FileMeta { size: 2, mtime: 2, hash: None, is_symlink: false, link_target: None }), status: DiffStatus::Mismatch },
+        ];
+        let actions = plan_actions(&diffs, MismatchStrategy::ExactRightToLeft, &HashMap::new(), &BTreeSet::new(), &BTreeSet::new());
+        assert_eq!(actions.len(), 3);
+        let by_path: HashMap<_, _> = actions.iter().map(|a| (a.path_rel.as_path(), &a.action_type)).collect();
+        assert!(matches!(by_path[std::path::Path::new("only_right.txt")], ActionType::CopyRightToLeft));
+        assert!(matches!(by_path[std::path::Path::new("only_left.txt")], ActionType::DeleteLeft));
+        assert!(matches!(by_path[std::path::Path::new("mismatch.txt")], ActionType::CopyRightToLeft));
+    }
+
+    #[test]
+    fn exact_delete_not_skipped_by_copied_recently() {
+        // Regression: a file in copied_recently that now needs deleting must not be skipped
+        let path = PathBuf::from("was_copied_now_extra.txt");
+        let diffs = vec![DiffEntry {
+            path_rel: path.clone(),
+            left: None,
+            right: Some(FileMeta { size: 1, mtime: 1, hash: None, is_symlink: false, link_target: None }),
+            status: DiffStatus::MissingLeft,
+        }];
+        let mut copied_recently = BTreeSet::new();
+        copied_recently.insert(path.clone());
+        // ExactLeftToRight: MissingLeft → DeleteRight, must fire even if in copied_recently
+        let actions = plan_actions(&diffs, MismatchStrategy::ExactLeftToRight, &HashMap::new(), &copied_recently, &BTreeSet::new());
         assert_eq!(actions.len(), 1);
         assert!(matches!(actions[0].action_type, ActionType::DeleteRight));
     }

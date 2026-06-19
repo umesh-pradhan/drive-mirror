@@ -1,6 +1,6 @@
 use crate::input::{
-    handle_confirm_delete_input, handle_confirm_input, handle_history_input,
-    handle_review_input, handle_strategy_input, AppArgs,
+    handle_confirm_delete_input, handle_confirm_exact_delete_input, handle_confirm_input,
+    handle_history_input, handle_review_input, handle_strategy_input, AppArgs,
 };
 use crate::render::{render_frame, reveal_in_file_manager};
 use drive_mirror_core::db::{
@@ -100,15 +100,22 @@ pub fn run_app(
                             state.copied_recently.insert(r.action.path_rel.clone());
                         }
                     }
-                    state.last_results = results;
-                    state.phase = Phase::Done;
-                    let base = if args.dry_run { "Dry-run complete" } else { "Sync complete" };
-                    let copied_count = state.copied_recently.len();
-                    state.status_line = match state.last_copied_dst.as_ref() {
-                        Some(path) => format!("{}. Last copied: {}. {} item(s) excluded from next sync.", base, path.display(), copied_count),
-                        None => format!("{}. {} item(s) excluded from next sync.", base, copied_count),
-                    };
-                    finalize_run(conn, run_id, "done")?;
+                    state.last_results.extend(results);
+                    // For exact sync: after copies complete, show delete confirmation
+                    if !state.pending_delete_actions.is_empty() {
+                        let delete_count = state.pending_delete_actions.len();
+                        state.phase = Phase::ConfirmExactDelete;
+                        state.status_line = format!("Copies done. {} file(s) to DELETE. Confirm? y=yes  n=skip deletes", delete_count);
+                    } else {
+                        state.phase = Phase::Done;
+                        let base = if args.dry_run { "Dry-run complete" } else { "Sync complete" };
+                        let copied_count = state.copied_recently.len();
+                        state.status_line = match state.last_copied_dst.as_ref() {
+                            Some(path) => format!("{}. Last copied: {}. {} item(s) excluded from next sync.", base, path.display(), copied_count),
+                            None => format!("{}. {} item(s) excluded from next sync.", base, copied_count),
+                        };
+                        finalize_run(conn, run_id, "done")?;
+                    }
                 }
                 WorkerEvent::Error(err) => {
                     state.status_line = err;
@@ -152,7 +159,7 @@ pub fn run_app(
                     state.last_esc = Some(now);
                     state.status_line = "Press Esc again to quit.".to_string();
                     match state.phase {
-                        Phase::ConfirmSync | Phase::ConfirmDelete | Phase::ChoosingStrategy | Phase::Syncing | Phase::Done | Phase::History => {
+                        Phase::ConfirmSync | Phase::ConfirmDelete | Phase::ConfirmExactDelete | Phase::ChoosingStrategy | Phase::Syncing | Phase::Done | Phase::History => {
                             state.phase = Phase::Review;
                             state.status_line = "Back to review.".to_string();
                         }
@@ -195,6 +202,7 @@ pub fn run_app(
                     Phase::ChoosingStrategy => handle_strategy_input(state, key.code),
                     Phase::ConfirmSync => handle_confirm_input(state, key.code, args, conn, run_id, &tx)?,
                     Phase::ConfirmDelete => handle_confirm_delete_input(state, key.code, args, conn, run_id, &tx)?,
+                    Phase::ConfirmExactDelete => handle_confirm_exact_delete_input(state, key.code, args, conn, run_id, &tx)?,
                     Phase::Done => { if key.code == KeyCode::Char('q') { break; } }
                     Phase::Scanning => { if key.code == KeyCode::Char('q') { state.status_line = "Exiting...".to_string(); break; } }
                     Phase::Syncing => {

@@ -56,7 +56,7 @@ pub fn render_frame(frame: &mut Frame, state: &mut AppState, args: &AppArgs) {
                 chunks[1],
             );
         }
-        Phase::Review | Phase::ChoosingStrategy | Phase::ConfirmSync | Phase::ConfirmDelete => render_review(frame, state, args, chunks[1]),
+        Phase::Review | Phase::ChoosingStrategy | Phase::ConfirmSync | Phase::ConfirmDelete | Phase::ConfirmExactDelete => render_review(frame, state, args, chunks[1]),
         Phase::History => render_history(frame, state, chunks[1]),
         Phase::Syncing => render_syncing(frame, state, args, chunks[1]),
         Phase::Done => render_done(frame, state, chunks[1]),
@@ -116,10 +116,23 @@ fn render_review(frame: &mut Frame, state: &AppState, args: &AppArgs, area: Rect
     display_state.select(Some(selected_idx.saturating_sub(start)));
     frame.render_stateful_widget(list, list_cols[0], &mut display_state);
     render_scrollbar(frame, list_cols[1], start, height, total);
-    frame.render_widget(
-        Paragraph::new(details_text(state, args)).block(Block::default().borders(Borders::ALL).title("Details")).wrap(Wrap { trim: true }),
-        body_chunks[1],
-    );
+
+    // Bottom panel: show delete confirmation list when in ConfirmExactDelete phase
+    if state.phase == Phase::ConfirmExactDelete {
+        let delete_text = render_exact_delete_text(state, args);
+        frame.render_widget(
+            Paragraph::new(delete_text)
+                .block(Block::default().borders(Borders::ALL).title("⚠  Confirm Deletions")
+                    .style(Style::default().fg(Color::Red)))
+                .wrap(Wrap { trim: true }),
+            body_chunks[1],
+        );
+    } else {
+        frame.render_widget(
+            Paragraph::new(details_text(state, args)).block(Block::default().borders(Borders::ALL).title("Details")).wrap(Wrap { trim: true }),
+            body_chunks[1],
+        );
+    }
 }
 
 fn render_history(frame: &mut Frame, state: &AppState, area: Rect) {
@@ -161,6 +174,32 @@ fn render_syncing(frame: &mut Frame, state: &AppState, args: &AppArgs, area: Rec
         )).block(Block::default().borders(Borders::ALL).title("Progress")).wrap(Wrap { trim: true }),
         area,
     );
+}
+
+fn render_exact_delete_text(state: &AppState, args: &AppArgs) -> String {
+    use drive_mirror_core::models::ActionType;
+    if state.pending_delete_actions.is_empty() {
+        return "No deletions pending.".to_string();
+    }
+    let mut lines = String::new();
+    for action in &state.pending_delete_actions {
+        let full_path = match action.action_type {
+            ActionType::DeleteLeft => args.left.join(&action.path_rel),
+            ActionType::DeleteRight => args.right.join(&action.path_rel),
+            _ => continue,
+        };
+        let side = match action.action_type {
+            ActionType::DeleteLeft => "DELETE LEFT ",
+            ActionType::DeleteRight => "DELETE RIGHT",
+            _ => continue,
+        };
+        lines.push_str(&format!("[{}]  {}\n", side, full_path.display()));
+    }
+    format!(
+        "Copies complete. The following {} file(s) will be permanently deleted:\n\n{}",
+        state.pending_delete_actions.len(),
+        lines
+    )
 }
 
 fn render_done(frame: &mut Frame, state: &AppState, area: Rect) {
@@ -209,9 +248,13 @@ pub fn help_text(state: &AppState) -> Line<'static> {
             Span::raw("l: L→R  r: R→L  d: delete  f: force  1-5: filter  n: sort  /: palette  F5: refresh  h: history  Esc Esc: quit"),
         ]),
         Phase::History => Line::from(vec![Span::raw("Up/Down: move  Esc: back  Esc Esc: quit")]),
-        Phase::ChoosingStrategy => Line::from(vec![Span::raw("n=newer  l=left  r=right  k=skip  b/Esc: back  Esc Esc: quit")]),
+        Phase::ChoosingStrategy => Line::from(vec![Span::raw("n=newer  l=prefer-left  r=prefer-right  k=skip  e=Exact L→R ⚠  x=Exact R→L ⚠  b/Esc: back")]),
         Phase::ConfirmSync => Line::from(vec![Span::raw("Enter/y: yes  n: no  b/Esc: back  Esc Esc: quit")]),
         Phase::ConfirmDelete => Line::from(vec![Span::raw("Confirm delete? Enter/y: delete  n/b/Esc: back  Esc Esc: quit")]),
+        Phase::ConfirmExactDelete => Line::from(vec![
+            Span::styled("⚠ DESTRUCTIVE: ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+            Span::raw("Enter/y: confirm delete  n/b: skip deletions (keep copies)  Esc Esc: quit"),
+        ]),
         Phase::Syncing => Line::from(vec![Span::raw("Syncing... q: cancel  o: reveal  Esc Esc: quit")]),
         Phase::Done => Line::from(vec![Span::raw("q: quit  o: reveal last copy  Esc Esc: quit")]),
         Phase::Scanning => Line::from(vec![Span::raw("Scanning... q: quit  Esc Esc: quit")]),
@@ -219,6 +262,20 @@ pub fn help_text(state: &AppState) -> Line<'static> {
 }
 
 fn details_text(state: &AppState, args: &AppArgs) -> String {
+    if state.phase == Phase::ChoosingStrategy {
+        return "Choose mismatch strategy:\n\n\
+            [n]  Newer mtime      — copy whichever side is newer\n\
+            [l]  Prefer Left      — always copy Left → Right\n\
+            [r]  Prefer Right     — always copy Right → Left\n\
+            [k]  Skip             — ignore mismatches\n\
+            [e]  Exact L→R  ⚠    — Right mirrors Left exactly\n\
+                                    copies missing files to Right,\n\
+                                    DELETES extras on Right\n\
+            [x]  Exact R→L  ⚠    — Left mirrors Right exactly\n\
+                                    copies missing files to Left,\n\
+                                    DELETES extras on Left\n\
+            [b]  Back\n".to_string();
+    }
     if state.diffs.is_empty() { return "No selection".to_string(); }
     let selection: Vec<usize> = if state.selected_items.is_empty() {
         state.filtered_indices.get(state.selected).copied().into_iter().collect()

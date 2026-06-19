@@ -5,7 +5,6 @@ use drive_mirror_core::models::{
     SyncScope, WorkerEvent,
 };
 use drive_mirror_core::planner::plan_actions;
-use drive_mirror_core::scanner::scan_worker;
 use drive_mirror_core::sync::sync_worker;
 use anyhow::Result;
 use crossterm::event::{KeyCode, KeyModifiers};
@@ -99,34 +98,14 @@ pub fn handle_review_input(state: &mut AppState, code: KeyCode, modifiers: KeyMo
             state.sync_scope = SyncScope::All;
             state.selected_items.clear();
             for &idx in &state.filtered_indices { state.selected_items.insert(idx); }
-            let only_missing_left = state.filter == Filter::MissingLeft;
-            let only_missing_right = state.filter == Filter::MissingRight;
-            let has_mismatch = if only_missing_left || only_missing_right { false } else {
-                state.filtered_indices.iter().filter_map(|&i| state.diffs.get(i))
-                    .any(|d| d.status == DiffStatus::Mismatch || d.status == DiffStatus::Conflict)
-            };
-            if has_mismatch { state.phase = Phase::ChoosingStrategy; state.status_line = "Choose mismatch strategy.".to_string(); }
-            else {
-                state.phase = Phase::ConfirmSync;
-                state.status_line = match state.filter {
-                    Filter::MissingLeft => "Confirm sync (copy Right -> Left for all filtered).".to_string(),
-                    Filter::MissingRight => "Confirm sync (copy Left -> Right for all filtered).".to_string(),
-                    _ => "Confirm sync.".to_string(),
-                };
-            }
+            state.phase = Phase::ChoosingStrategy;
+            state.status_line = "Choose sync strategy.".to_string();
         }
         KeyCode::Enter => {
             if state.diffs.is_empty() { return; }
             state.sync_scope = SyncScope::Selected;
-            let has_mismatch = if state.selected_items.is_empty() {
-                let idx = *state.filtered_indices.get(state.selected).unwrap_or(&0);
-                matches!(state.diffs.get(idx).map(|d| &d.status), Some(DiffStatus::Mismatch) | Some(DiffStatus::Conflict))
-            } else {
-                state.selected_items.iter().filter_map(|i| state.diffs.get(*i))
-                    .any(|d| d.status == DiffStatus::Mismatch || d.status == DiffStatus::Conflict)
-            };
-            if has_mismatch { state.phase = Phase::ChoosingStrategy; state.status_line = "Choose mismatch strategy.".to_string(); }
-            else { state.phase = Phase::ConfirmSync; state.status_line = "Confirm sync.".to_string(); }
+            state.phase = Phase::ChoosingStrategy;
+            state.status_line = "Choose sync strategy.".to_string();
         }
         KeyCode::Char('1') => { state.filter = Filter::All; recompute_filtered_indices(state); }
         KeyCode::Char('2') => { state.filter = Filter::MissingLeft; recompute_filtered_indices(state); }
@@ -182,6 +161,8 @@ pub fn handle_strategy_input(state: &mut AppState, code: KeyCode) {
         KeyCode::Char('l') => Some(MismatchStrategy::PreferLeft),
         KeyCode::Char('r') => Some(MismatchStrategy::PreferRight),
         KeyCode::Char('k') => Some(MismatchStrategy::Skip),
+        KeyCode::Char('e') => Some(MismatchStrategy::ExactLeftToRight),
+        KeyCode::Char('x') => Some(MismatchStrategy::ExactRightToLeft),
         _ => state.mismatch_strategy,
     };
     if state.mismatch_strategy.is_some() { state.phase = Phase::ConfirmSync; state.status_line = "Confirm sync.".to_string(); }
@@ -206,8 +187,8 @@ pub fn handle_confirm_input(state: &mut AppState, code: KeyCode, args: &AppArgs,
                     }
                 }
             };
-            state.pending_actions = plan_actions(&diffs, strategy, &state.action_overrides, &state.copied_recently, &state.force_recopy);
-            if state.pending_actions.is_empty() {
+            let all_actions = plan_actions(&diffs, strategy, &state.action_overrides, &state.copied_recently, &state.force_recopy);
+            if all_actions.is_empty() {
                 state.phase = Phase::Done;
                 state.status_line = if diffs.iter().any(|d| d.status == DiffStatus::Conflict) {
                     "No actions. Conflicts need override (l/r).".to_string()
@@ -215,27 +196,77 @@ pub fn handle_confirm_input(state: &mut AppState, code: KeyCode, args: &AppArgs,
                 finalize_run(conn, run_id, "done")?;
                 return Ok(());
             }
-            let actions = state.pending_actions.clone();
-            let left = args.left.clone();
-            let right = args.right.clone();
-            let compare = args.compare;
-            let retries = args.retries;
-            let dry_run = args.dry_run;
-            let sync_tx = tx.clone();
-            let cancel_flag = state.cancel_after_current.clone();
-            thread::spawn(move || {
-                if let Err(err) = sync_worker(left, right, actions, compare, retries, dry_run, cancel_flag, sync_tx.clone()) {
-                    let _ = sync_tx.send(WorkerEvent::Error(err.to_string()));
+
+            // For exact strategies: split copies and deletes; copies run first, then confirm deletes
+            let is_exact = matches!(strategy, MismatchStrategy::ExactLeftToRight | MismatchStrategy::ExactRightToLeft);
+            if is_exact {
+                let (copy_actions, delete_actions): (Vec<_>, Vec<_>) = all_actions.into_iter()
+                    .partition(|a| matches!(a.action_type, ActionType::CopyLeftToRight | ActionType::CopyRightToLeft));
+                state.pending_delete_actions = delete_actions;
+                if copy_actions.is_empty() {
+                    // No copies needed, go straight to delete confirmation if there are deletes
+                    if state.pending_delete_actions.is_empty() {
+                        state.phase = Phase::Done;
+                        state.status_line = "No actions to apply.".to_string();
+                        finalize_run(conn, run_id, "done")?;
+                    } else {
+                        state.phase = Phase::ConfirmExactDelete;
+                        state.status_line = format!("{} file(s) will be deleted. Confirm?", state.pending_delete_actions.len());
+                    }
+                    return Ok(());
                 }
-            });
-            state.phase = Phase::Syncing;
-            state.status_line = "Sync in progress.".to_string();
-            state.sync_start = None; state.sync_speed_bps = 0.0;
-            state.current_src = None; state.current_dst = None;
-            state.current_copied = 0; state.current_total = 0;
-            state.current_start = None; state.current_speed_bps = 0.0;
+                state.pending_actions = copy_actions.clone();
+                spawn_sync(copy_actions, args, state, tx);
+            } else {
+                state.pending_delete_actions.clear();
+                state.pending_actions = all_actions.clone();
+                spawn_sync(all_actions, args, state, tx);
+            }
         }
         KeyCode::Char('n') => { state.phase = Phase::Review; state.status_line = "Sync canceled.".to_string(); }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn spawn_sync(actions: Vec<drive_mirror_core::models::Action>, args: &AppArgs, state: &mut AppState, tx: &Sender<WorkerEvent>) {
+    let left = args.left.clone();
+    let right = args.right.clone();
+    let compare = args.compare;
+    let retries = args.retries;
+    let dry_run = args.dry_run;
+    let sync_tx = tx.clone();
+    let cancel_flag = state.cancel_after_current.clone();
+    thread::spawn(move || {
+        if let Err(err) = sync_worker(left, right, actions, compare, retries, dry_run, cancel_flag, sync_tx.clone()) {
+            let _ = sync_tx.send(WorkerEvent::Error(err.to_string()));
+        }
+    });
+    state.phase = Phase::Syncing;
+    state.status_line = "Sync in progress.".to_string();
+    state.sync_start = None; state.sync_speed_bps = 0.0;
+    state.current_src = None; state.current_dst = None;
+    state.current_copied = 0; state.current_total = 0;
+    state.current_start = None; state.current_speed_bps = 0.0;
+}
+
+pub fn handle_confirm_exact_delete_input(state: &mut AppState, code: KeyCode, args: &AppArgs, conn: &Connection, run_id: i64, tx: &Sender<WorkerEvent>) -> Result<()> {
+    match code {
+        KeyCode::Char('y') | KeyCode::Enter => {
+            let deletes = std::mem::take(&mut state.pending_delete_actions);
+            if deletes.is_empty() {
+                state.phase = Phase::Done;
+                finalize_run(conn, run_id, "done")?;
+                return Ok(());
+            }
+            spawn_sync(deletes, args, state, tx);
+        }
+        KeyCode::Char('n') | KeyCode::Char('b') => {
+            state.pending_delete_actions.clear();
+            state.phase = Phase::Done;
+            state.status_line = "Deletions skipped. Copies complete.".to_string();
+            finalize_run(conn, run_id, "done")?;
+        }
         _ => {}
     }
     Ok(())
